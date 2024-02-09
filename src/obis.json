@@ -1,0 +1,155 @@
+{
+    "obis_fields": [
+        {
+            "key": "0-0:1.0.0",
+            "name": "timestamp",
+            "type": "timestamp",
+            "description": "Timestamp of P1 message"
+        },
+        {
+            "key": "0-0:96.1.1",
+            "name": "equipmentIdentifier",
+            "type": "string",
+            "description": "Equipment identifier"
+        },
+        {
+            "key": "1-0:1.8.1",
+            "name": "electricityImportedT1",
+            "unit": "kWh",
+            "type": "float",
+            "description": "Meter Reading electricity delivered to client (low tariff) in 0,001 kWh"
+        },
+        {
+            "key": "1-0:1.8.2",
+            "name": "electricityImportedT2",
+            "unit": "kWh",
+            "type": "float",
+            "description": "Meter Reading electricity delivered to client (normal tariff) in 0,001 kWh"
+        },
+        {
+            "key": "1-0:2.8.1",
+            "name": "electricityExportedT1",
+            "unit": "kWh",
+            "type": "float",
+            "description": "Meter Reading electricity delivered by client (low tariff) in 0,001 kWh"
+        },
+        {
+            "key": "1-0:2.8.2",
+            "name": "electricityExportedT2",
+            "unit": "kWh",
+            "type": "float",
+            "description": "Meter Reading electricity delivered by client (normal tariff) in 0,001 kWh"
+        },
+        {
+            "key": "0-0:96.14.0",
+            "name": "tariffIndicator",
+            "type": "int",
+            "description": "Tariff indicator electricity. The tariff indicator can be used to switch tariff dependent loads e.g boilers. This is responsibility of the P1 user"
+        },
+        {
+            "key": "1-0:1.7.0",
+            "name": "powerImportedActual",
+            "unit": "kW",
+            "type": "float",
+            "description": "Actual electricity power delivered (+P) in 1 Watt resolution"
+        },
+        {
+            "key": "1-0:2.7.0",
+            "name": "powerExportedActual",
+            "unit": "kW",
+            "type": "float",
+            "description": "Actual electricity power received (-P) in 1 Watt resolution"
+        },
+        {
+            "key": "1-0:32.7.0",
+            "name": "instantaneousVoltageL1",
+            "unit": "V",
+            "type": "float",
+            "description": "Instantaneous voltage L1"
+        },
+        {
+            "key": "1-0:52.7.0",
+            "name": "instantaneousVoltageL2",
+            "unit": "V",
+            "type": "float",
+            "description": "Instantaneous voltage L2"
+        },
+        {
+            "key": "1-0:72.7.0",
+            "name": "instantaneousVoltageL3",
+            "unit": "V",
+            "type": "float",
+            "description": "Instantaneous voltage L3"
+        },
+        {
+            "key": "1-0:31.7.0",
+            "name": "instantaneousCurrentL1",
+            "unit": "A",
+            "type": "float",
+            "description": "Instantaneous current L1"
+        },
+        {
+            "key": "1-0:51.7.0",
+            "name": "instantaneousCurrentL2",
+            "unit": "A",
+            "type": "float",
+            "description": "Instantaneous current L2"
+        },
+        {
+            "key": "1-0:71.7.0",
+            "name": "instantaneousCurrentL3",
+            "unit": "A",
+            "type": "float",
+            "description": "Instantaneous current L3"
+        },
+        {
+            "key": "1-0:21.7.0",
+            "name": "instantaneousActivePowerL1Plus",
+            "unit": "kW",
+            "type": "float",
+            "description": "Instantaneous active power L1 (+P)"
+        },
+        {
+            "key": "1-0:41.7.0",
+            "name": "instantaneousActivePowerL2Plus",
+            "unit": "kW",
+            "type": "float",
+            "description": "Instantaneous active power L2 (+P)"
+        },
+        {
+            "key": "1-0:61.7.0",
+            "name": "instantaneousActivePowerL3Plus",
+            "unit": "kW",
+            "type": "float",
+            "description": "Instantaneous active power L3 (+P)"
+        },
+        {
+            "key": "1-0:22.7.0",
+            "name": "instantaneousActivePowerL1Min",
+            "unit": "kW",
+            "type": "float",
+            "description": "Instantaneous active power L1 (-P)"
+        },
+        {
+            "key": "1-0:42.7.0",
+            "name": "instantaneousActivePowerL2Min",
+            "unit": "kW",
+            "type": "float",
+            "description": "Instantaneous active power L2 (-P)"
+        },
+        {
+            "key": "1-0:62.7.0",
+            "name": "instantaneousActivePowerL3Min",
+            "unit": "kW",
+            "type": "float",
+            "description": "Instantaneous active power L3 (-P)"
+        },
+        {
+            "key": "0-1:24.2.1",
+            "name": "gas",
+            "unit": "m³",
+            "type": "float",
+            "description": "Last 5-minute value (temperature converted), gas delivered to client in m3, including decimal values and capture time"
+        }
+    ]
+}

@@ -1,21 +1,20 @@
 import logging
 
-import ujson as json #used for deepcopy of dict
+import uasyncio as asyncio
+import ujson as json  # used for deepcopy of dict
 import ure as re
 import utime as time
 from machine import UART, Pin
-import uasyncio as asyncio
-from utilities import  crc16, Feedback, seconds_between
 
-from mqttclient import MQTTClient2
 import config as cfg
-
+from mqttclient import MQTTClient2
+from utilities import Feedback, crc16, seconds_between
 
 # Logging
 log = logging.getLogger('p1meter')
 #set level no lower than ..... for this log only
 #log.level = min(logging.DEBUG, logging._level) #pylint: disable=protected-access
-VERBOSE = False
+VERBOSE = True
 
 print(r"""
 ______  __   ___  ___     _            
@@ -42,17 +41,19 @@ def dictcopy(d: dict):
 # @timed_function
 def replace_codes(readings: list)-> list:
     "replace the OBIS codes by their ROOT_TOPIC as defined in the codetable"
+    result = []
     for reading in readings:
         for code in cfg.codetable:
             if re.match(code[0], reading['meter']):
                 reading['meter'] = re.sub(code[0], code[1], reading['meter'])
 
-                if reading['unit'] and len(reading['unit']) > 0:
-                    reading['meter'] += '_' + reading['unit']
+                #if reading['unit'] and len(reading['unit']) > 0:
+                #    reading['meter'] += '_' + reading['unit']
                 if VERBOSE:
                     log.debug("{} --> {}".format(code[0], reading['meter']))
+                result.append(reading)        
                 break
-    return readings
+    return result
 
 class P1Meter():
     """
@@ -68,7 +69,8 @@ class P1Meter():
         # UART 1 = Receive and TX if configured as Splitter
         self.uart = UART(1, rx=cfg.RX_PIN_NR, tx=cfg.TX_PIN_NR,
                          baudrate=115200, bits=8, parity=None,
-                         stop=1, invert=UART.INV_RX | UART.INV_TX,
+                         stop=1, #invert=UART.INV_RX | UART.INV_TX,
+                         invert=0,
                          txbuf=2048, rxbuf=2048)                     # larger buffer for testing and stability
         log.info("setup to receive P1 meter data : {}".format(self.uart))
         self.last = []
@@ -87,6 +89,9 @@ class P1Meter():
         self.cts.on()                 # Ask P1 meter to send data
         # In case the
         self.dtr = Pin(cfg.DTR_PIN_NR, Pin.IN, Pin.PULL_DOWN)
+        with open('obis.json') as fp:
+            self.obis:list = json.load(fp)["obis_fields"]
+        self.daily_usage:dict | None = None
 
 
     def clearlast(self)-> None:
@@ -188,6 +193,98 @@ class P1Meter():
                 readings.append(lineinfo)
         return readings
 
+    def parse_obis_telegram(self,telegram) -> Dict:
+        def parse_hex(str) -> str:
+            try:
+                result = bytes.fromhex(str).decode()
+            except ValueError:
+                result = str
+            return result
+        def format_value(value: str, type: str, unit: str) -> Union[str, float]:
+            # Timestamp has message of format "YYMMDDhhmmssX"
+            multiply = 1
+            if len(unit) > 0 and unit[0] == "k":
+                multiply = 1000
+            format_functions: dict = {
+                "float": lambda str: float(str) * multiply,
+                "int": lambda str: int(str) * multiply,
+                "timestamp": lambda str: '20' + str[:2] + '-' + str[2:4] + '-' + str[4:6] + ' ' + str[6:8] + ':' + str[8:10] + ':' + str[10:12] ,
+                "string": lambda str: parse_hex(str),
+                "unknown": lambda str: str,
+            }
+            return_value = format_functions[type](value.split("*")[0])
+            return return_value
+
+        telegram_formatted: dict = {}
+        for line in telegram:
+            obis_key = line['meter'].strip()
+            obis_item = None
+            for item in self.obis:
+                if item.get("key","") == obis_key:
+                    obis_item = item
+                    break
+            if obis_item is not None:
+                item_type: str = obis_item.get("type", "")
+                # logger.debug("Key %s  Name: %s Unit: %s <-- %s" %  (obis_item.get("key", "") ,  obis_item.get("name", "") , obis_item.get("unit", "no unit") , line. strip()) )
+                unit = obis_item.get("unit", "no unit")
+                telegram_formatted[obis_item.get("name")] = (
+                    format_value(line['reading'], item_type, unit)
+                )
+        return telegram_formatted
+
+
+
+    def post_process(self, telegram_formatted: dict) -> dict:
+        "post process the telegram for  (net) totals and daily usage etc"
+        telegram_formatted["electricityImported"] = (
+        telegram_formatted["electricityImportedT1"] * 1 + telegram_formatted["electricityImportedT2"] * 1)
+        telegram_formatted["electricityExported"] = (
+        telegram_formatted["electricityExportedT1"] * 1 + telegram_formatted["electricityExportedT2"] * 1)
+        telegram_formatted["electricityImportedNet"] = ( telegram_formatted["electricityImported"] * 1 - telegram_formatted["electricityExported"] * 1)
+        telegram_formatted["powerNetActual"] = (
+        telegram_formatted["powerImportedActual"] * 1 - telegram_formatted["powerExportedActual"] * 1) 
+        return telegram_formatted
+
+    def daily_totals(self, telegram_formatted: dict) -> dict:
+        "calculate the daily usage"
+        daily_usage = self.daily_usage
+        daily_usage_fields=[ "electricityImported", "electricityExported", "electricityImportedNet"]
+        daily_usage_file = f"/daily/{telegram_formatted["timestamp"][:7]}_daily_usage.json"
+        monthly_usage = {}
+        if daily_usage is None:
+            log.info(f"Reading daily values from {daily_usage_file}")
+            try:
+                with open(daily_usage_file, "r") as file:
+                    monthly_usage = json.load(file)
+                daily_usage = monthly_usage[telegram_formatted["timestamp"][:10]]
+                self.daily_usage = daily_usage
+            except Exception as e:
+                log.error(f"Error reading daily values from {daily_usage_file}: {e}")
+    
+        # Store the daily usage in a separate dictionary
+        if daily_usage is None or (daily_usage["timestamp"][:10] != telegram_formatted["timestamp"][:10]):
+            log.info(f"Updating daily values and save to {daily_usage_file}")
+            daily_usage = dict()
+            for field in daily_usage_fields:
+                try:
+                    daily_usage[field] = telegram_formatted[field]
+                except KeyError:
+                    daily_usage[field] = 0
+                    telegram_formatted[field] = 0
+                    log.error(f"Field {field} not found in telegram")
+            daily_usage["timestamp"] = telegram_formatted["timestamp"]
+            self.daily_usage = daily_usage
+            monthly_usage[telegram_formatted["timestamp"][:10]] = daily_usage
+            self.mqtt_client.publish_history(monthly_usage, f"hist-{telegram_formatted["timestamp"][:7]}")
+            try:
+                with open(daily_usage_file, "w") as file:
+                    file.write(json.dumps(monthly_usage))
+            except Exception as e:
+                log.error(f"Error writing daily values to {daily_usage_file}: {e}")
+        for field in daily_usage_fields:
+            telegram_formatted[f"{field}Today"] = telegram_formatted[field] - daily_usage[field]
+        return telegram_formatted    
+
     async def process(self, tele: dict):
         # check CRC
         if not self.crc_ok(tele):
@@ -204,16 +301,18 @@ class P1Meter():
             self.telegrams_tx += 1
 
         # what has changed since last time  ?
-        newdata = set(tele['data']) - set(self.last)
-        readings = self.parsereadings(newdata)
+        #newdata = set(tele['data']) - set(self.last)
+        #readings = self.parsereadings(newdata)        
+        readings = self.parsereadings(tele['data'])
 
-        # replace codes for ROOT_TOPICs
-        readings = replace_codes(readings)
-        log.debug("readings: {}".format(readings))
-
+        telegram = self.parse_obis_telegram(readings)
+        telegram = self.post_process(telegram)
+        telegram = self.daily_totals(telegram)
+        log.debug("telegram: {}".format(telegram))
+ 
         # move list into dictionary
-        for reading in readings:
-            self.pending[reading['meter']] = reading
+#        for reading in readings:
+#            self.pending[reading['meter']] = reading
 
         delta_sec = seconds_between(self.last_time, time.localtime())
         if  delta_sec < cfg.INTERVAL_MIN and self.telegrams_pub > 0:
@@ -225,11 +324,12 @@ class P1Meter():
         else:
             # send this data and any unsent information
             self.fb.update(Feedback.LED_P1METER, Feedback.GREEN)
-            readings = list(self.pending.values())
-            if await self.mqtt_client.publish_readings(readings):
+            #readings = list(self.pending.values())
+
+            if await self.mqtt_client.publish_telegram(telegram):
                 # only safe last if mqtt publish was ok
                 self.telegrams_pub += 1
-                self.last = tele['data'].copy()
+                #self.last = tele['data'].copy()
                 self.pending = {}
                 self.last_time = time.localtime()
             else:

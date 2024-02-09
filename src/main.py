@@ -3,12 +3,14 @@
 import gc
 import logging
 import time
+
 import uasyncio as asyncio
-from p1meter import P1Meter
+
+import config as cfg
 import wifi
 from mqttclient import MQTTClient2
-import config as cfg
-from utilities import cpu_temp, Feedback, reboot, getntptime
+from p1meter import P1Meter
+from utilities import Feedback, cpu_temp, getntptime, reboot
 
 # Splitter and Simulator cannot be run at the same time as they use the same UART
 if cfg.RUN_SIM and not cfg.RUN_SPLITTER:
@@ -110,10 +112,14 @@ glb_mqtt_client = MQTTClient2()
 glb_p1_meter = P1Meter(mq_client=glb_mqtt_client, fb=fb)
 
 def run():
+    key_cancelled=False
     try:
         log.info('micropython p1 meter is starting...')
         fb.clear()
         asyncio.run(main(glb_mqtt_client))
+    except KeyboardInterrupt:
+        key_cancelled=True
+        log.info("KeyboardInterrupt")
     finally:
         # status
         fb.clear(fb.RED)
@@ -121,6 +127,7 @@ def run():
         log.info("Clear async loop retained state")
         asyncio.new_event_loop()  # Clear retained state
 
+    if key_cancelled==False:
         reboot(10)
 
 

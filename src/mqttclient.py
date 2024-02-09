@@ -9,7 +9,8 @@ import uasyncio as asyncio
 import ujson as json
 from umqtt.simple import MQTTClient, MQTTException
 
-from config import HOST_NAME, ROOT_TOPIC, broker, publish_as_json
+from config import (HOST_NAME, ROOT_TOPIC, TELEGRAM_TOPIC, broker,
+                    publish_as_json, publish_as_values)
 from utilities import reboot
 from wifi import wlan, wlan_stable
 
@@ -30,7 +31,7 @@ class MQTTClient2(object):
         self.user = broker['user']
         self.password = broker['password']
         self.ping_failed = 0
-        self.port = broker['port']
+        self.port: int = int(broker['port']) if 'port' in broker else 1883
 
 
 
@@ -87,6 +88,12 @@ class MQTTClient2(object):
                 # flag re-init of MQTT client
                 self.mqtt_client = None
 
+    def sub_cb(self, topic, msg):
+        "callback for subscription"
+        log.debug("Received: {} -> {}".format(topic, msg))
+        if msg == b"reboot":
+            reboot()
+
     def connect(self):
         global _conn_errors
         if self.mqtt_client is None:
@@ -97,6 +104,8 @@ class MQTTClient2(object):
                 print("connecting to mqtt server {0}".format(self.server))
                 self.mqtt_client.connect()
                 print("Connected")
+                self.mqtt_client.set_callback(self.sub_cb)
+                self.mqtt_client.subscribe(ROOT_TOPIC + b"/cmd")
             except (MQTTException, OSError)  as e:
                 # try to give a decent error for common problems
                 if type(e) is type(MQTTException()):
@@ -133,6 +142,35 @@ class MQTTClient2(object):
                 self.connect()
             await asyncio.sleep(10)
 
+    async def publish_history(self, history: dict, history_topic:str) -> bool:
+        if publish_as_json:
+            #write readings as json
+            topic = ROOT_TOPIC + b"/" + history_topic.encode()
+            if not self.publish_one(topic, json.dumps(history)):
+                log.warning("Could not published {history_topic} history as json")
+                return False
+            log.debug(f"Published {history_topic} history as json")
+        return True
+
+    async def publish_telegram(self, readings: dict) -> bool:
+        if publish_as_json:
+            #write readings as json
+            topic = ROOT_TOPIC + b"/" + TELEGRAM_TOPIC
+            if not self.publish_one(topic, json.dumps(readings)):
+                log.warning("Could not publish {} meter readings as json".format(len(readings)))
+                return False
+            log.debug("Published {} meter readings as json".format(len(readings)))
+
+        #write readings 1 by one
+        if publish_as_values:
+            for  key, value in readings.items():
+                topic = ROOT_TOPIC + b"/"+ key.encode()
+                if not self.publish_one(topic, str(value)):
+                    log.warning("Could not publish {} meter readings value {}".format(key,value))
+                    return False
+            log.info("Published {} meter readings".format(len(readings)))
+        return True
+    
     async def publish_readings(self, readings: list) -> bool:
         if publish_as_json:
             #write readings as json
