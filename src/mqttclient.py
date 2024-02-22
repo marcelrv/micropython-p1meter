@@ -79,7 +79,7 @@ class MQTTClient2(object):
     def disconnect(self):
         "disconnect and close"
         if self.mqtt_client:
-            log.debug('disconnecting from mqtt')
+            log.debug('disconnecting from MQTT server')
             try:
                 self.mqtt_client.disconnect()
             except BaseException as error:
@@ -97,15 +97,16 @@ class MQTTClient2(object):
     def connect(self):
         global _conn_errors
         if self.mqtt_client is None:
-            log.info("create mqtt client {0}".format(self.server))
+            log.info("create MQTT client {0}".format(self.server))
             self.mqtt_client = MQTTClient(HOST_NAME, self.server, port=self.port, user=self.user, password=self.password, keepalive=30)
         if wlan.status() == network.STAT_GOT_IP:
             try:
-                print("connecting to mqtt server {0}".format(self.server))
+                log.info("Connecting to MQTT server {0}".format(self.server))
                 self.mqtt_client.connect()
-                print("Connected")
+                log.info("Connected to MQTT server {0}".format(self.server))
                 self.mqtt_client.set_callback(self.sub_cb)
                 self.mqtt_client.subscribe(ROOT_TOPIC + b"/cmd")
+                log.info("MQTT subscribed to {0}".format(ROOT_TOPIC + b"/cmd"))
             except (MQTTException, OSError)  as e:
                 # try to give a decent error for common problems
                 if type(e) is type(MQTTException()):
@@ -137,8 +138,10 @@ class MQTTClient2(object):
         # also try/check for OSError: 118 when connecting, to avoid breaking the loop
         # repro: machine.reset()
         while True:
+            if self.mqtt_client is not None:
+                self.mqtt_client.check_msg()
             if self.mqtt_client is None or self.mqtt_client.sock is None:
-                log.warning('need to start mqqt client')
+                log.warning('need to start MQTT client')
                 self.connect()
             await asyncio.sleep(10)
 

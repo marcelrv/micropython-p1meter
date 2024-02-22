@@ -42,12 +42,12 @@ HOST_NAME = b'p1_meter'
 # UART 1 = Receive
 # Pull-up resistor Wired into GPIO 15 for crosscable :-(
 RX_PIN_NR = 16              # P1_in - RJ12-5 - Cross cable
-CTS_PIN_NR = const(5)       # P1_in - RJ12-2 - Cross cable
+CTS_PIN_NR = const(22)       # P1_in - RJ12-2 - Cross cable
 
 
 # Splitter or SYM Port (also UART1)
 # TX pin must be specified
-TX_PIN_NR = const(18)       # P1_Out - Pin 5 - Straight cable
+TX_PIN_NR = const(10)       # P1_Out - Pin 5 - Straight cable
 DTR_PIN_NR = const(19)      # P1_Out - Pin 2 - Straight cable
 
 TEST = False
@@ -69,6 +69,12 @@ TELEGRAM_TOPIC = b'meter'
 #also publish telegram as json and/or individual values
 publish_as_json = True
 publish_as_values = False
+
+#------------------------------------------------
+MULTIPLY_READINGS=True
+
+#------------------------------------------------
+ENABLE_FTP = False
 
 #------------------------------------------------
 # A few Leds - optional

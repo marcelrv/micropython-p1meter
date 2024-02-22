@@ -5,6 +5,7 @@ import ujson as json  # used for deepcopy of dict
 import ure as re
 import utime as time
 from machine import UART, Pin
+import math
 
 import config as cfg
 from mqttclient import MQTTClient2
@@ -14,7 +15,7 @@ from utilities import Feedback, crc16, seconds_between
 log = logging.getLogger('p1meter')
 #set level no lower than ..... for this log only
 #log.level = min(logging.DEBUG, logging._level) #pylint: disable=protected-access
-VERBOSE = True
+VERBOSE = False
 
 print(r"""
 ______  __   ___  ___     _            
@@ -71,6 +72,7 @@ class P1Meter():
                          baudrate=115200, bits=8, parity=None,
                          stop=1, #invert=UART.INV_RX | UART.INV_TX,
                          invert=0,
+                         timeout=300,
                          txbuf=2048, rxbuf=2048)                     # larger buffer for testing and stability
         log.info("setup to receive P1 meter data : {}".format(self.uart))
         self.last = []
@@ -175,22 +177,25 @@ class P1Meter():
         "split the received data into readings(meter, reading, unit)"
         readings = []
         for line in newdata:
-            out = re.match('(.*?)\((.*)\)', line)           #pylint: disable=anomalous-backslash-in-string
-            if out:
-                lineinfo = {'meter': out.group(1), 'reading':None, 'unit': None}
+            try:
+                out = re.match('(.*?)\((.*)\)', line)           #pylint: disable=anomalous-backslash-in-string
+                if out:
+                    lineinfo = {'meter': out.group(1), 'reading':None, 'unit': None}
 
-                reading = out.group(2).split('*')
-                if len(reading) == 2:
-                    lineinfo['reading'] = reading[0]
-                    lineinfo['unit'] = reading[1]
-                else:
-                    lineinfo['reading'] = reading[0]
-                # a few meters have compound content, that remain seperated by `)(`
-                # split and use  only the last section (ie gas meter reading)
-                lineinfo['reading'] = lineinfo['reading'].split(')(')[-1]
-                if VERBOSE:
-                    log.debug(lineinfo)
-                readings.append(lineinfo)
+                    reading = out.group(2).split('*')
+                    if len(reading) == 2:
+                        lineinfo['reading'] = reading[0]
+                        lineinfo['unit'] = reading[1]
+                    else:
+                        lineinfo['reading'] = reading[0]
+                    # a few meters have compound content, that remain seperated by `)(`
+                    # split and use  only the last section (ie gas meter reading)
+                    lineinfo['reading'] = lineinfo['reading'].split(')(')[-1]
+                    if VERBOSE:
+                        log.debug(lineinfo)
+                    readings.append(lineinfo)
+            except Exception as e:
+                log.debug(f"Error {e} processsing line: {line}")
         return readings
 
     def parse_obis_telegram(self,telegram) -> Dict:
@@ -203,7 +208,7 @@ class P1Meter():
         def format_value(value: str, type: str, unit: str) -> Union[str, float]:
             # Timestamp has message of format "YYMMDDhhmmssX"
             multiply = 1
-            if len(unit) > 0 and unit[0] == "k":
+            if cfg.MULTIPLY_READINGS and len(unit) > 0 and unit[0] == "k":
                 multiply = 1000
             format_functions: dict = {
                 "float": lambda str: float(str) * multiply,
@@ -315,9 +320,9 @@ class P1Meter():
 #            self.pending[reading['meter']] = reading
 
         delta_sec = seconds_between(self.last_time, time.localtime())
-        if  delta_sec < cfg.INTERVAL_MIN and self.telegrams_pub > 0:
+        if  math.fabs(delta_sec) < cfg.INTERVAL_MIN  and self.telegrams_pub > 0:
             ## do not send too often, remember any changes to send later
-            log.info('suppress send')
+            log.info(f'suppress send. Seconds since last: {delta_sec}. Published {self.telegrams_pub} telegrams')
             log.debug('pending : {}'.format(self.pending.keys))
             # turn off
             self.fb.update(Feedback.LED_P1METER, Feedback.BLACK)

@@ -1,6 +1,13 @@
 {
     "obis_fields": [
         {
+            "key": "1-3:0.2.8",
+            "name": "versionInformation",
+            "type": "int",
+            "description": "Version information for P1 output"
+        },
+
+        {
             "key": "0-0:1.0.0",
             "name": "timestamp",
             "type": "timestamp",

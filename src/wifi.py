@@ -4,15 +4,17 @@ import network
 import utime as time
 import webrepl
 import config as cfg
-import uftpd
-from config import webrepl as config_webrepl
+from config import ENABLE_FTP, webrepl as config_webrepl
 from utilities import getntptime
+if ENABLE_FTP:
+    import uftpd
 
 wlan = network.WLAN(network.STA_IF)
 wlan_stable = False
 
 #wait until wifi is connected
-uftpd.stop()
+if ENABLE_FTP:
+    uftpd.stop()
 
 # Logging
 log = logging.getLogger(__name__)
@@ -93,8 +95,9 @@ async def check_stable(duration: int = 2000)->bool:
         await asyncio.sleep_ms(10)
     # connected and IP
     wlan_stable = wlan.isconnected() and wlan.status() == network.STAT_GOT_IP
-    uftpd.restart()
-    log.info('ftp server restarted')
+    if ENABLE_FTP:
+        uftpd.restart()
+        log.info('ftp server restarted')
     try:
         if config_webrepl["active"]:
             log.info('start webrepl')
