@@ -9,8 +9,8 @@ import uasyncio as asyncio
 import ujson as json
 from umqtt.simple import MQTTClient, MQTTException
 
-from config import (HOST_NAME, ROOT_TOPIC, TELEGRAM_TOPIC, broker,
-                    publish_as_json, publish_as_values)
+from config import (HOST_NAME, LAST_WILL_MSG, LAST_WILL_TOPIC, ROOT_TOPIC,
+                    TELEGRAM_TOPIC, broker, publish_as_json, publish_as_values)
 from utilities import reboot
 from wifi import wlan, wlan_stable
 
@@ -98,7 +98,10 @@ class MQTTClient2(object):
         global _conn_errors
         if self.mqtt_client is None:
             log.info("create MQTT client {0}".format(self.server))
-            self.mqtt_client = MQTTClient(HOST_NAME, self.server, port=self.port, user=self.user, password=self.password, keepalive=30)
+            self.mqtt_client = MQTTClient(HOST_NAME, self.server, port=self.port, user=self.user, password=self.password, keepalive=30 )
+        if LAST_WILL_MSG and LAST_WILL_TOPIC:
+            self.mqtt_client.set_last_will(LAST_WILL_TOPIC, LAST_WILL_MSG, retain=True)
+            log.info("Set last will to {0} -> {1}".format(LAST_WILL_TOPIC, LAST_WILL_MSG))
         if wlan.status() == network.STAT_GOT_IP:
             try:
                 log.info("Connecting to MQTT server {0}".format(self.server))
@@ -107,6 +110,7 @@ class MQTTClient2(object):
                 self.mqtt_client.set_callback(self.sub_cb)
                 self.mqtt_client.subscribe(ROOT_TOPIC + b"/cmd")
                 log.info("MQTT subscribed to {0}".format(ROOT_TOPIC + b"/cmd"))
+                self.mqtt_client.publish(LAST_WILL_TOPIC, b'Online', retain=True)
             except (MQTTException, OSError)  as e:
                 # try to give a decent error for common problems
                 if type(e) is type(MQTTException()):
@@ -138,7 +142,7 @@ class MQTTClient2(object):
         # also try/check for OSError: 118 when connecting, to avoid breaking the loop
         # repro: machine.reset()
         while True:
-            if self.mqtt_client is not None:
+            if self.mqtt_client is not None and self.mqtt_client.sock is not None:
                 self.mqtt_client.check_msg()
             if self.mqtt_client is None or self.mqtt_client.sock is None:
                 log.warning('need to start MQTT client')

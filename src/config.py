@@ -10,11 +10,11 @@ DEBUG = True
 
 #------------------------------------------------
 # Split the signal (using TX_PIN_NR)
-RUN_SPLITTER = False
+RUN_SPLITTER = True
 
 #------------------------------------------------
 # run the simulator for testing (using TX_PIN_NR)
-RUN_SIM = True
+RUN_SIM = False
 #------------------------------------------------
 
 INTERVAL_MIN = 1       # publish readings no more than every X seconds.
@@ -65,6 +65,8 @@ if TEST or hexlify(unique_id())[-6:] in [b'2598b4', b'19e74c', b'40665c', b'19e7
 #MQTT topic follows network ID
 ROOT_TOPIC = b'/energyHS'
 TELEGRAM_TOPIC = b'meter'
+LAST_WILL_TOPIC = b'/energyHS/status_P1'
+LAST_WILL_MSG = b'offline'
 
 #also publish telegram as json and/or individual values
 publish_as_json = True
