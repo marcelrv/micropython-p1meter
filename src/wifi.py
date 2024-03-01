@@ -1,11 +1,15 @@
 import logging
-import uasyncio as asyncio
+
 import network
+import uasyncio as asyncio
 import utime as time
 import webrepl
+
 import config as cfg
-from config import ENABLE_FTP, webrepl as config_webrepl
+from config import ENABLE_FTP
+from config import webrepl as config_webrepl
 from utilities import getntptime
+
 if ENABLE_FTP:
     import uftpd
 
@@ -40,6 +44,8 @@ def activate():
     if not wlan.active():
         wlan.active(True)
         wlan.config(dhcp_hostname=cfg.HOST_NAME)
+        #wlan.config(pm=wlan.PM_NONE)
+        wlan.config(txpower=18)
     if not wlan.isconnected():
         log.info("Activating Wlan {0}".format(cfg.homenet['SSID']))
         wlan.connect(cfg.homenet['SSID'], cfg.homenet['password'])

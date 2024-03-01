@@ -125,6 +125,7 @@ def run():
         fb.clear(fb.RED)
 
         log.info("Clear async loop retained state")
+        glb_mqtt_client.disconnect()
         asyncio.new_event_loop()  # Clear retained state
 
     if key_cancelled==False:

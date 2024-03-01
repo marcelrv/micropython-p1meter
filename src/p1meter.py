@@ -10,6 +10,7 @@ import math
 import config as cfg
 from mqttclient import MQTTClient2
 from utilities import Feedback, crc16, seconds_between
+import binascii
 
 # Logging
 log = logging.getLogger('p1meter')
@@ -201,7 +202,8 @@ class P1Meter():
     def parse_obis_telegram(self,telegram) -> Dict:
         def parse_hex(str) -> str:
             try:
-                result = bytes.fromhex(str).decode()
+                #result = bytes.fromhex(str).decode()
+                result = binascii.unhexlify(str).decode()
             except ValueError:
                 result = str
             return result
@@ -253,7 +255,7 @@ class P1Meter():
     def daily_totals(self, telegram_formatted: dict) -> dict:
         "calculate the daily usage"
         daily_usage = self.daily_usage
-        daily_usage_fields=[ "electricityImported", "electricityExported", "electricityImportedNet"]
+        daily_usage_fields=[ "electricityImported", "electricityExported", "electricityImportedNet", "gas"]
         daily_usage_file = f"/daily/{telegram_formatted["timestamp"][:7]}_daily_usage.json"
         monthly_usage = {}
         if daily_usage is None:

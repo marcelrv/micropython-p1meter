@@ -3,6 +3,8 @@
 #####################################################
 
 import logging
+import re
+import time
 
 import network
 import uasyncio as asyncio
@@ -32,9 +34,28 @@ class MQTTClient2(object):
         self.password = broker['password']
         self.ping_failed = 0
         self.port: int = int(broker['port']) if 'port' in broker else 1883
+        self.lastping = 0
 
 
-
+    def ping(self):
+        "ping the server"
+        fastping=False
+        if self.lastping and time.ticks_ms() - self.lastping < 50:
+            log.debug('ping too soon')
+            Falseping=True
+        self.lastping = time.ticks_ms()
+        if self.mqtt_client:
+            if not fastping:
+                self.mqtt_client.ping()
+            # drain the message queue for possible messages
+            process=True
+            while process:
+                ret = self.mqtt_client.check_msg()
+                process = ret is not None
+                #log.debug(f"check_msg returned {ret }")
+            self.lastping = time.ticks_ms()
+        else:
+            log.warning('no mqtt client to ping')
 
     def healthy(self) -> bool:
         "is the client healthy?"
@@ -51,11 +72,11 @@ class MQTTClient2(object):
                 state = False
             else:
                 # do server ping
-                try: 
-                    self.mqtt_client.ping()
+                try:
+                    self.ping()
                     self.ping_failed = 0
                 except (OSError, MQTTException) as e:
-                    log.warning('mqtt_client.ping() failed')
+                    log.warning(f'mqtt_client.ping() failed: {e}')
                     self.ping_failed =+ 10
                     if self.ping_failed > 50:
                         log.debug("Disconnecting due to ping fail count")
@@ -81,6 +102,7 @@ class MQTTClient2(object):
         if self.mqtt_client:
             log.debug('disconnecting from MQTT server')
             try:
+                self.publish_one(LAST_WILL_TOPIC, LAST_WILL_MSG, retain=True)
                 self.mqtt_client.disconnect()
             except BaseException as error:
                 log.error("Oops while disconnecting MQTT : {}".format(error) )
@@ -91,26 +113,27 @@ class MQTTClient2(object):
     def sub_cb(self, topic, msg):
         "callback for subscription"
         log.debug("Received: {} -> {}".format(topic, msg))
-        if msg == b"reboot":
-            reboot()
+        if len (msg) > 0 and  "reboot" in msg.decode():
+            self.disconnect()
+            reboot(1)
 
     def connect(self):
         global _conn_errors
-        if self.mqtt_client is None:
-            log.info("create MQTT client {0}".format(self.server))
-            self.mqtt_client = MQTTClient(HOST_NAME, self.server, port=self.port, user=self.user, password=self.password, keepalive=30 )
-        if LAST_WILL_MSG and LAST_WILL_TOPIC:
-            self.mqtt_client.set_last_will(LAST_WILL_TOPIC, LAST_WILL_MSG, retain=True)
-            log.info("Set last will to {0} -> {1}".format(LAST_WILL_TOPIC, LAST_WILL_MSG))
         if wlan.status() == network.STAT_GOT_IP:
             try:
-                log.info("Connecting to MQTT server {0}".format(self.server))
-                self.mqtt_client.connect()
-                log.info("Connected to MQTT server {0}".format(self.server))
+                if self.mqtt_client is None:
+                    log.info("Create MQTT client {0}".format(self.server))
+                    self.mqtt_client = MQTTClient(client_id=HOST_NAME, server=self.server, port=self.port, user=self.user, password=self.password, keepalive=30 )
+                if LAST_WILL_MSG and LAST_WILL_TOPIC:
+                    self.mqtt_client.set_last_will(LAST_WILL_TOPIC, LAST_WILL_MSG, retain=True)
+                    log.info("Set last will to {0} -> {1}".format(LAST_WILL_TOPIC, LAST_WILL_MSG))
                 self.mqtt_client.set_callback(self.sub_cb)
+                log.info("Connecting to MQTT server {0}".format(self.server))
+                self.mqtt_client.connect(clean_session=True)
+                log.info("Connected to MQTT server {0}".format(self.server))
                 self.mqtt_client.subscribe(ROOT_TOPIC + b"/cmd")
                 log.info("MQTT subscribed to {0}".format(ROOT_TOPIC + b"/cmd"))
-                self.mqtt_client.publish(LAST_WILL_TOPIC, b'Online', retain=True)
+                self.publish_one(LAST_WILL_TOPIC, 'online',retain=True)
             except (MQTTException, OSError)  as e:
                 # try to give a decent error for common problems
                 if type(e) is type(MQTTException()):
@@ -142,11 +165,14 @@ class MQTTClient2(object):
         # also try/check for OSError: 118 when connecting, to avoid breaking the loop
         # repro: machine.reset()
         while True:
-            if self.mqtt_client is not None and self.mqtt_client.sock is not None:
-                self.mqtt_client.check_msg()
-            if self.mqtt_client is None or self.mqtt_client.sock is None:
-                log.warning('need to start MQTT client')
-                self.connect()
+            try:
+                if not wlan.status()==network.STAT_GOT_IP or self.mqtt_client is None or self.mqtt_client.sock is None: 
+                    log.warning('need to start MQTT client')
+                    self.connect()
+                else:
+                    self.ping()
+            except Exception as e:
+                log.error("Problem during ensure_mqtt_connected: {}".format(e))
             await asyncio.sleep(10)
 
     async def publish_history(self, history: dict, history_topic:str) -> bool:
@@ -196,13 +222,13 @@ class MQTTClient2(object):
         log.info("Published {} meter readings".format(len(readings)))
         return True
 
-    def publish_one(self, topic, value) -> bool:
+    def publish_one(self, topic, value, retain=False) -> bool:
         "Publish a single ROOT_TOPIC to MQTT"
         if not self.healthy():
             return False
         r = True
         try:
-            self.mqtt_client.publish(topic, value)
+            self.mqtt_client.publish(topic, value, retain)
         except BaseException as error:
             log.error("Problem sending {} to MQTT : {}".format(topic, error) )
             r = False

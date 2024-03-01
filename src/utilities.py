@@ -37,10 +37,10 @@ def cpu_temp()->float:
 
 def reboot(delay: int = 3):
     fb = Feedback()            # reboot after x seconds stopped when in production
-    print('Rebooting in {} seconds, Ctrl-C to abort'.format(3*delay))
+    print('Rebooting in {} seconds, Ctrl-C to abort'.format(delay))
     for n in range(3):
         fb.update(n, fb.PURPLE)
-        time.sleep(delay)
+        time.sleep(delay/3)
         fb.update(n, fb.BLUE)
     print('Rebooting now...')
     machine.reset()
